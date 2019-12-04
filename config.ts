@@ -1,11 +1,5 @@
-import {dirname} from "https://deno.land/std/path/mod.ts";
-import https = require("https");
-import path = require("path");
-
-import yaml = require("js-yaml");
-import request = require("request");
-
-import * as api from "./api";
+import * as path from "https://deno.land/std/path/mod.ts";
+import * as yaml from "https://deno.land/std/encoding/yaml.ts";
 import {Authenticator} from "./auth";
 import {CloudAuth} from "./cloud_auth";
 import {
@@ -23,14 +17,25 @@ import {ExecAuth} from "./exec_auth";
 import {FileAuth} from "./file_auth";
 import {OpenIDConnectAuth} from "./oidc_auth";
 
-async function fileExists(filepath: string): Promise<boolean> {
+function fileExists(filepath: string): boolean {
   try {
-    const info = await Deno.stat(filepath);
+    const info = Deno.statSync(filepath);
     return info.isFile();
   } catch (err) {
     if (err.name !== "NotFound")
       throw err;
     return false;
+  }
+}
+
+function dirExists(dirpath: string): boolean {
+  try {
+    const info = Deno.statSync(dirpath);
+    return info.isDirectory()
+  } catch (err) {
+    if (err.name !== "NotFound")
+      throw err;
+      return false;
   }
 }
 
@@ -41,6 +46,11 @@ export class KubeConfig {
     new FileAuth(),
     new OpenIDConnectAuth()
   ];
+
+  // Moved from `Config` class.
+  public static SERVICEACCOUNT_ROOT = "/var/run/secrets/kubernetes.io/serviceaccount";
+  public static SERVICEACCOUNT_CA_PATH = KubeConfig.SERVICEACCOUNT_ROOT + "/ca.crt";
+  public static SERVICEACCOUNT_TOKEN_PATH = KubeConfig.SERVICEACCOUNT_ROOT + "/token";
 
   /**
    * The list of all known clusters
@@ -119,10 +129,10 @@ export class KubeConfig {
     return findObject(this.users, name, "user");
   }
 
-  public async loadFromFile(filepath: string) {
+  public loadFromFile(filepath: string) {
     const decoder = new TextDecoder("utf-8");
     const rootDirectory = path.dirname(filepath);
-    const content = decoder.decode(await Deno.readFile(filepath));
+    const content = decoder.decode(Deno.readFileSync(filepath));
     this.loadFromString(content);
     this.makePathsAbsolute(rootDirectory);
   }
@@ -189,8 +199,8 @@ export class KubeConfig {
   }
 
   public loadFromCluster(pathPrefix: string = "") {
-    const host = process.env.KUBERNETES_SERVICE_HOST;
-    const port = process.env.KUBERNETES_SERVICE_PORT;
+    const host = Deno.env("KUBERNETES_SERVICE_HOST");
+    const port = Deno.env("KUBERNETES_SERVICE_PORT");
     const clusterName = "inCluster";
     const userName = "inClusterUser";
     const contextName = "inClusterContext";
@@ -203,7 +213,7 @@ export class KubeConfig {
     this.clusters = [
       {
         name: clusterName,
-        caFile: `${pathPrefix}${Config.SERVICEACCOUNT_CA_PATH}`,
+        caFile: `${pathPrefix}${KubeConfig.SERVICEACCOUNT_CA_PATH}`,
         server: `${scheme}://${host}:${port}`,
         skipTLSVerify: false
       }
@@ -214,7 +224,7 @@ export class KubeConfig {
         authProvider: {
           name: "tokenFile",
           config: {
-            tokenFile: `${pathPrefix}${Config.SERVICEACCOUNT_TOKEN_PATH}`
+            tokenFile: `${pathPrefix}${KubeConfig.SERVICEACCOUNT_TOKEN_PATH}`
           }
         }
       }
@@ -279,8 +289,9 @@ export class KubeConfig {
   }
 
   public loadFromDefault() {
-    if (process.env.KUBECONFIG && process.env.KUBECONFIG.length > 0) {
-      const files = process.env.KUBECONFIG.split(path.delimiter);
+    const configPath = Deno.env("KUBECONFIG");
+    if (configPath) {
+      const files = configPath.split(path.delimiter);
       this.loadFromFile(files[0]);
       for (let i = 1; i < files.length; i++) {
         const kc = new KubeConfig();
@@ -298,7 +309,7 @@ export class KubeConfig {
       }
     }
 
-    if (fileExists(Config.SERVICEACCOUNT_TOKEN_PATH)) {
+    if (fileExists(KubeConfig.SERVICEACCOUNT_TOKEN_PATH)) {
       this.loadFromCluster();
       return;
     }
@@ -307,17 +318,6 @@ export class KubeConfig {
       { name: "cluster", server: "http://localhost:8080" } as Cluster,
       { name: "user" } as User
     );
-  }
-
-  public makeApiClient<T extends ApiType>(apiClientType: ApiConstructor<T>) {
-    const cluster = this.getCurrentCluster();
-    if (!cluster) {
-      throw new Error("No active cluster!");
-    }
-    const apiClient = new apiClientType(cluster.server);
-    apiClient.setDefaultAuthentication(this);
-
-    return apiClient;
   }
 
   public makePathsAbsolute(rootDirectory: string) {
@@ -414,67 +414,6 @@ export class KubeConfig {
 */
 }
 
-export interface ApiType {
-  setDefaultAuthentication(config: api.Authentication);
-}
-
-type ApiConstructor<T extends ApiType> = new (server: string) => T;
-
-// This class is deprecated and will eventually be removed.
-export class Config {
-  public static SERVICEACCOUNT_ROOT =
-    "/var/run/secrets/kubernetes.io/serviceaccount";
-  public static SERVICEACCOUNT_CA_PATH = Config.SERVICEACCOUNT_ROOT + "/ca.crt";
-  public static SERVICEACCOUNT_TOKEN_PATH =
-    Config.SERVICEACCOUNT_ROOT + "/token";
-
-  public static fromFile(filename: string): api.CoreV1Api {
-    return Config.apiFromFile(filename, api.CoreV1Api);
-  }
-
-  public static fromCluster(): api.CoreV1Api {
-    return Config.apiFromCluster(api.CoreV1Api);
-  }
-
-  public static defaultClient(): api.CoreV1Api {
-    return Config.apiFromDefaultClient(api.CoreV1Api);
-  }
-
-  public static apiFromFile<T extends ApiType>(
-    filename: string,
-    apiClientType: ApiConstructor<T>
-  ): T {
-    const kc = new KubeConfig();
-    kc.loadFromFile(filename);
-    return kc.makeApiClient(apiClientType);
-  }
-
-  public static apiFromCluster<T extends ApiType>(
-    apiClientType: ApiConstructor<T>
-  ): T {
-    const kc = new KubeConfig();
-    kc.loadFromCluster();
-
-    const cluster = kc.getCurrentCluster();
-    if (!cluster) {
-      throw new Error("No active cluster!");
-    }
-
-    const k8sApi = new apiClientType(cluster.server);
-    k8sApi.setDefaultAuthentication(kc);
-
-    return k8sApi;
-  }
-
-  public static apiFromDefaultClient<T extends ApiType>(
-    apiClientType: ApiConstructor<T>
-  ): T {
-    const kc = new KubeConfig();
-    kc.loadFromDefault();
-    return kc.makeApiClient(apiClientType);
-  }
-}
-
 export function makeAbsolutePath(root: string, file: string): string {
   if (!root || path.isAbsolute(file)) {
     return file;
@@ -482,46 +421,23 @@ export function makeAbsolutePath(root: string, file: string): string {
   return path.join(root, file);
 }
 
-// This is public really only for testing.
-export function bufferFromFileOrString(
-  file?: string,
-  data?: string
-): Buffer | null {
-  if (file) {
-    return fs.readFileSync(file);
-  }
-  if (data) {
-    return Buffer.from(data, "base64");
-  }
-  return null;
-}
-
 // Only public for testing.
 export function findHomeDir(): string | null {
-  if (process.env.HOME) {
-    try {
-      fs.accessSync(process.env.HOME);
-      return process.env.HOME;
-      // tslint:disable-next-line:no-empty
-    } catch (ignore) {}
+  const env = Deno.env();
+  if (env.HOME && dirExists(env.HOME)) {
+    return env.HOME
   }
-  if (process.platform !== "win32") {
+  if (Deno.build.os !== "win") {
     return null;
   }
-  if (process.env.HOMEDRIVE && process.env.HOMEPATH) {
-    const dir = path.join(process.env.HOMEDRIVE, process.env.HOMEPATH);
-    try {
-      fs.accessSync(dir);
+  if (env.HOMEDRIVE && env.HOMEPATH) {
+    const dir = path.join(env.HOMEDRIVE, env.HOMEPATH);
+    if (dirExists(dir)) {
       return dir;
-      // tslint:disable-next-line:no-empty
-    } catch (ignore) {}
+    }
   }
-  if (process.env.USERPROFILE) {
-    try {
-      fs.accessSync(process.env.USERPROFILE);
-      return process.env.USERPROFILE;
-      // tslint:disable-next-line:no-empty
-    } catch (ignore) {}
+  if (env.USERPROFILE && dirExists(env.USERPROFILE)) {
+    return env.USERPROFILE;
   }
   return null;
 }

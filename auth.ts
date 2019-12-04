@@ -1,0 +1,9 @@
+import {User} from "./config_types";
+
+export interface Authenticator {
+  isAuthProvider(user: User): boolean;
+  applyAuthentication(
+    user: User,
+    opts: any   // request.Options | https.RequestOptions
+  ): Promise<void>;
+}
