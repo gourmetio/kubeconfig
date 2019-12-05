@@ -1,5 +1,6 @@
 {
   "scripts": {
+    "build": "tsc",
     "test": "ts-node test/main.ts"
   },
   "main": "lib/index.js",
