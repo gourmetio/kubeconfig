@@ -1,4 +1,9 @@
 {
+  "name": "@gourmet/kubeconfig",
+  "version": "0.2.0",
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsc",
     "test": "ts-node test/main.ts"

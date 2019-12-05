@@ -71,13 +71,16 @@ export class KubeConfig {
 
   public setCurrentContext(name: string): ResolvedContext {
     const context = getObject(this.contexts, name, "context");
-    this.currentContext = {
+    const rctx = this.currentContext = {
       cluster: getObject(this.clusters, context.cluster, "cluster"),
       user: getObject(this.users, context.user, "user"),
       name,
       namespace: context.namespace
     };
-    return this.currentContext;
+    rctx.cluster.ca = loadFromFileOrString(rctx.cluster.caFile, rctx.cluster.caData);
+    rctx.user.cert = loadFromFileOrString(rctx.user.certFile, rctx.user.certData);
+    rctx.user.key = loadFromFileOrString(rctx.user.keyFile, rctx.user.keyData);
+    return rctx;
   }
 
   public loadFromFile(filepath: string) {
@@ -266,9 +269,9 @@ export class KubeConfig {
     };
     if (options.server.startsWith("https://")) {
       options.rejectUnauthorized = !cluster.skipTLSVerify;
-      options.ca = loadFromFileOrString(cluster.caFile, cluster.caData);
-      options.cert = loadFromFileOrString(user.certFile, user.certData);
-      options.key = loadFromFileOrString(user.keyFile, user.keyData);
+      options.ca = cluster.ca;
+      options.cert = user.cert;
+      options.key = user.key;
     }
     const authenticator = KubeConfig.authenticators.find(
       (item: Authenticator) => {

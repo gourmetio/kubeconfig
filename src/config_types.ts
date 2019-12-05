@@ -2,6 +2,7 @@ export interface Cluster {
   readonly name: string;
   readonly caData?: string;
   caFile?: string;
+  ca?: string;
   readonly server: string;
   readonly skipTLSVerify: boolean;
 }
@@ -10,9 +11,11 @@ export interface User {
   readonly name: string;
   readonly certData?: string;
   certFile?: string;
+  cert?: string;
   readonly exec?: any;
   readonly keyData?: string;
   keyFile?: string;
+  key?: string;
   readonly authProvider?: any;
   readonly token?: string;
   readonly username?: string;
