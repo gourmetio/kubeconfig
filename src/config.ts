@@ -52,7 +52,7 @@ export class KubeConfig {
   private currentContext?: ResolvedContext;
 
   constructor({
-    loadFromDefault=false
+    loadFromDefault=true
   }: {
     loadFromDefault?: boolean
   }={}) {
