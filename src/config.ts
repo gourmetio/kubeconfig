@@ -1,50 +1,29 @@
-import * as path from "https://deno.land/std/path/mod.ts";
-import * as yaml from "https://deno.land/std/encoding/yaml.ts";
+import fs from "fs";
+import path from "path";
+import yaml from "js-yaml";
 import {Authenticator} from "./auth";
-import {CloudAuth} from "./cloud_auth";
 import {
   Cluster,
   Context,
-  exportCluster,
-  exportContext,
-  exportUser,
-  newClusters,
-  newContexts,
-  newUsers,
-  User
+  User,
+  ResolvedContext,
+  RequestOptions
 } from "./config_types";
+import {CloudAuth} from "./cloud_auth";
 import {ExecAuth} from "./exec_auth";
 import {FileAuth} from "./file_auth";
-import {OpenIDConnectAuth} from "./oidc_auth";
-
-function fileExists(filepath: string): boolean {
-  try {
-    const info = Deno.statSync(filepath);
-    return info.isFile();
-  } catch (err) {
-    if (err.name !== "NotFound")
-      throw err;
-    return false;
-  }
-}
-
-function dirExists(dirpath: string): boolean {
-  try {
-    const info = Deno.statSync(dirpath);
-    return info.isDirectory()
-  } catch (err) {
-    if (err.name !== "NotFound")
-      throw err;
-      return false;
-  }
-}
+//import {OpenIDConnectAuth} from "./oidc_auth";
+import {StaticAuth} from "./static_auth";
+import {BasicAuth} from "./basic_auth";
 
 export class KubeConfig {
   private static authenticators: Authenticator[] = [
     new CloudAuth(),
     new ExecAuth(),
     new FileAuth(),
-    new OpenIDConnectAuth()
+    //new OpenIDConnectAuth(),
+    new StaticAuth(),
+    new BasicAuth()
   ];
 
   // Moved from `Config` class.
@@ -68,9 +47,9 @@ export class KubeConfig {
   public contexts: Context[];
 
   /**
-   * The name of the current context
+   * The current context with resolved `user` and `cluster`
    */
-  public currentContext: string;
+  private currentContext?: ResolvedContext;
 
   constructor() {
     this.contexts = [];
@@ -78,94 +57,28 @@ export class KubeConfig {
     this.users = [];
   }
 
-  public getContexts() {
-    return this.contexts;
-  }
-
-  public getClusters() {
-    return this.clusters;
-  }
-
-  public getUsers() {
-    return this.users;
-  }
-
-  public getCurrentContext() {
+  public getCurrentContext(): ResolvedContext {
+    if (!this.currentContext)
+      throw Error("The current context is not set.");
     return this.currentContext;
   }
 
-  public setCurrentContext(context: string) {
-    this.currentContext = context;
-  }
-
-  public getContextObject(name: string) {
-    if (!this.contexts) {
-      return null;
-    }
-    return findObject(this.contexts, name, "context");
-  }
-
-  public getCurrentCluster(): Cluster | null {
-    const context = this.getCurrentContextObject();
-    if (!context) {
-      return null;
-    }
-    return this.getCluster(context.cluster);
-  }
-
-  public getCluster(name: string): Cluster | null {
-    return findObject(this.clusters, name, "cluster");
-  }
-
-  public getCurrentUser(): User | null {
-    const ctx = this.getCurrentContextObject();
-    if (!ctx) {
-      return null;
-    }
-    return this.getUser(ctx.user);
-  }
-
-  public getUser(name: string): User | null {
-    return findObject(this.users, name, "user");
+  public setCurrentContext(name: string) {
+    const context = getObject(this.contexts, name, "context");
+    this.currentContext = {
+      cluster: getObject(this.clusters, context.cluster, "cluster"),
+      user: getObject(this.users, context.user, "user"),
+      name,
+      namespace: context.namespace
+    };
   }
 
   public loadFromFile(filepath: string) {
-    const decoder = new TextDecoder("utf-8");
     const rootDirectory = path.dirname(filepath);
-    const content = decoder.decode(Deno.readFileSync(filepath));
+    const content = fs.readFileSync(filepath, "utf8");
     this.loadFromString(content);
     this.makePathsAbsolute(rootDirectory);
   }
-
-/*
-  public async applytoHTTPSOptions(opts: https.RequestOptions) {
-    const user = this.getCurrentUser();
-
-    await this.applyOptions(opts);
-
-    if (user && user.username) {
-      opts.auth = `${user.username}:${user.password}`;
-    }
-  }
-
-  public async applyToRequest(opts: request.Options) {
-    const cluster = this.getCurrentCluster();
-    const user = this.getCurrentUser();
-
-    await this.applyOptions(opts);
-
-    if (cluster && cluster.skipTLSVerify) {
-      opts.strictSSL = false;
-    }
-
-    if (user && user.username) {
-      opts.auth = {
-        password: user.password,
-        username: user.username
-      };
-    }
-  }
-*/
 
   public loadFromString(config: string) {
     const obj = yaml.safeLoad(config) as any;
@@ -175,32 +88,32 @@ export class KubeConfig {
     this.clusters = newClusters(obj.clusters);
     this.contexts = newContexts(obj.contexts);
     this.users = newUsers(obj.users);
-    this.currentContext = obj["current-context"];
+    this.setCurrentContext(obj["current-context"]);
   }
 
   public loadFromOptions(options: any) {
     this.clusters = options.clusters;
     this.contexts = options.contexts;
     this.users = options.users;
-    this.currentContext = options.currentContext;
+    this.setCurrentContext(options.currentContext);
   }
 
   public loadFromClusterAndUser(cluster: Cluster, user: User) {
     this.clusters = [cluster];
     this.users = [user];
-    this.currentContext = "loaded-context";
     this.contexts = [
       {
         cluster: cluster.name,
         user: user.name,
-        name: this.currentContext
+        name: "loaded-context"
       } as Context
     ];
+    this.setCurrentContext("loaded-context");
   }
 
   public loadFromCluster(pathPrefix: string = "") {
-    const host = Deno.env("KUBERNETES_SERVICE_HOST");
-    const port = Deno.env("KUBERNETES_SERVICE_PORT");
+    const host = process.env.KUBERNETES_SERVICE_HOST;
+    const port = process.env.KUBERNETES_SERVICE_PORT;
     const clusterName = "inCluster";
     const userName = "inClusterUser";
     const contextName = "inClusterContext";
@@ -236,7 +149,7 @@ export class KubeConfig {
         user: userName
       }
     ];
-    this.currentContext = contextName;
+    this.setCurrentContext(contextName);
   }
 
   public mergeConfig(config: KubeConfig) {
@@ -289,7 +202,7 @@ export class KubeConfig {
   }
 
   public loadFromDefault() {
-    const configPath = Deno.env("KUBECONFIG");
+    const configPath = process.env.KUBECONFIG;
     if (configPath) {
       const files = configPath.split(path.delimiter);
       this.loadFromFile(files[0]);
@@ -336,129 +249,174 @@ export class KubeConfig {
     });
   }
 
-  public exportConfig(): string {
-    const configObj = {
-      apiVersion: "v1",
-      kind: "Config",
-      clusters: this.clusters.map(exportCluster),
-      users: this.users.map(exportUser),
-      contexts: this.contexts.map(exportContext),
-      preferences: {},
-      "current-context": this.getCurrentContext()
+  public async getRequestOptions(): Promise<RequestOptions> {
+    const context = this.getCurrentContext();
+    const cluster = context.cluster;
+    const user = context.user;
+    const options: RequestOptions = {
+      server: cluster.server,
+      headers: {}
     };
-
-    return JSON.stringify(configObj);
-  }
-
-  private getCurrentContextObject() {
-    return this.getContextObject(this.currentContext);
-  }
-
-  /*
-  private applyHTTPSOptions(opts: request.Options | https.RequestOptions) {
-    const cluster = this.getCurrentCluster();
-    const user = this.getCurrentUser();
-    if (!user) {
-      return;
-    }
-
-    if (cluster != null && cluster.skipTLSVerify) {
-      opts.rejectUnauthorized = false;
-    }
-    const ca =
-      cluster != null
-        ? bufferFromFileOrString(cluster.caFile, cluster.caData)
-        : null;
-    if (ca) {
-      opts.ca = ca;
-    }
-    const cert = bufferFromFileOrString(user.certFile, user.certData);
-    if (cert) {
-      opts.cert = cert;
-    }
-    const key = bufferFromFileOrString(user.keyFile, user.keyData);
-    if (key) {
-      opts.key = key;
-    }
-  }
-
-  private async applyAuthorizationHeader(
-    opts: request.Options | https.RequestOptions
-  ) {
-    const user = this.getCurrentUser();
-    if (!user) {
-      return;
+    if (options.server.startsWith("https://")) {
+      options.rejectUnauthorized = !cluster.skipTLSVerify;
+      options.ca = bufferFromFileOrString(cluster.caFile, cluster.caData);
+      options.cert = bufferFromFileOrString(user.certFile, user.certData);
+      options.key = bufferFromFileOrString(user.keyFile, user.keyData);
     }
     const authenticator = KubeConfig.authenticators.find(
-      (elt: Authenticator) => {
-        return elt.isAuthProvider(user);
+      (item: Authenticator) => {
+        return item.isAuthProvider(user);
       }
     );
-
-    if (!opts.headers) {
-      opts.headers = [];
-    }
     if (authenticator) {
-      await authenticator.applyAuthentication(user, opts);
+      await authenticator.applyAuthentication(user, options);
     }
-
-    if (user.token) {
-      opts.headers.Authorization = `Bearer ${user.token}`;
-    }
+    return options;
   }
-
-  private async applyOptions(opts: request.Options | https.RequestOptions) {
-    this.applyHTTPSOptions(opts);
-    await this.applyAuthorizationHeader(opts);
-  }
-*/
 }
 
-export function makeAbsolutePath(root: string, file: string): string {
+function fileExists(filepath: string): boolean {
+  try {
+    const info = fs.statSync(filepath);
+    return info.isFile();
+  } catch (err) {
+    if (err.code !== "ENOENT")
+      throw err;
+    return false;
+  }
+}
+
+function dirExists(dirpath: string): boolean {
+  try {
+    const info = fs.statSync(dirpath);
+    return info.isDirectory();
+  } catch (err) {
+    if (err.code !== "ENOENT")
+      throw err;
+    return false;
+  }
+}
+
+function makeAbsolutePath(root: string, file: string): string {
   if (!root || path.isAbsolute(file)) {
     return file;
   }
   return path.join(root, file);
 }
 
-// Only public for testing.
-export function findHomeDir(): string | null {
-  const env = Deno.env();
-  if (env.HOME && dirExists(env.HOME)) {
-    return env.HOME
+function bufferFromFileOrString(file?: string, data?: string): Buffer | undefined {
+  if (file) {
+    return fs.readFileSync(file);
   }
-  if (Deno.build.os !== "win") {
+  if (data) {
+    return Buffer.from(data, "base64");
+  }
+}
+
+function findHomeDir(): string | null {
+  if (process.env.HOME && dirExists(process.env.HOME)) {
+    return process.env.HOME
+  }
+  if (process.platform === "win32") {
     return null;
   }
-  if (env.HOMEDRIVE && env.HOMEPATH) {
-    const dir = path.join(env.HOMEDRIVE, env.HOMEPATH);
+  if (process.env.HOMEDRIVE && process.env.HOMEPATH) {
+    const dir = path.join(process.env.HOMEDRIVE, process.env.HOMEPATH);
     if (dirExists(dir)) {
       return dir;
     }
   }
-  if (env.USERPROFILE && dirExists(env.USERPROFILE)) {
-    return env.USERPROFILE;
+  if (process.env.USERPROFILE && dirExists(process.env.USERPROFILE)) {
+    return process.env.USERPROFILE;
   }
   return null;
 }
 
-export interface Named {
+interface Named {
   name: string;
 }
 
-// Only really public for testing...
-export function findObject<T extends Named>(
+function getObject<T extends Named>(
   list: T[],
   name: string,
-  key: string
-): T | null {
+  kind: string
+): T {
   for (const obj of list) {
     if (obj.name === name) {
-      if (obj[key]) {
-        return obj[key];
-      }
       return obj;
     }
   }
-  return null;
+  throw Error(`Invalid ${kind} name: ${name}`);
+}
+
+function newClusters(clusters: any[]): Cluster[] {
+  return clusters.map((item, i) => {
+    if (!item.name) {
+      throw new Error(`clusters[${i}].name is missing`);
+    }
+    if (!item.cluster) {
+      throw new Error(`clusters[${i}].cluster is missing`);
+    }
+    if (!item.cluster.server) {
+      throw new Error(`clusters[${i}].cluster.server is missing`);
+    }
+    return {
+      caData: item.cluster["certificate-authority-data"],
+      caFile: item.cluster["certificate-authority"],
+      name: item.name,
+      server: item.cluster.server,
+      skipTLSVerify: item.cluster["insecure-skip-tls-verify"] === true
+    };
+  });
+}
+
+function newUsers(users: any[]): User[] {
+  return users.map((item, i) => {
+    if (!item.name) {
+      throw new Error(`users[${i}].name is missing`);
+    }
+    return {
+      authProvider: item.user ? item.user["auth-provider"] : null,
+      certData: item.user ? item.user["client-certificate-data"] : null,
+      certFile: item.user ? item.user["client-certificate"] : null,
+      exec: item.user ? item.user.exec : null,
+      keyData: item.user ? item.user["client-key-data"] : null,
+      keyFile: item.user ? item.user["client-key"] : null,
+      name: item.name,
+      token: findToken(item.user),
+      password: item.user ? item.user.password : null,
+      username: item.user ? item.user.username : null
+    };
+  });
+}
+
+function findToken(user: any | undefined): string | undefined {
+  if (user) {
+    if (user.token) {
+      return user.token;
+    }
+    if (user["token-file"]) {
+      return fs.readFileSync(user["token-file"], "utf8");
+    }
+  }
+}
+
+function newContexts(contexts: any[]): Context[] {
+  return contexts.map((item, i) => {
+    if (!item.name) {
+      throw new Error(`contexts[${i}].name is missing`);
+    }
+    if (!item.context) {
+      throw new Error(`contexts[${i}].context is missing`);
+    }
+    if (!item.context.cluster) {
+      throw new Error(`contexts[${i}].context.cluster is missing`);
+    }
+    return {
+      cluster: item.context.cluster,
+      name: item.name,
+      user: item.context.user || undefined,
+      namespace: item.context.namespace || undefined
+    };
+  });
 }

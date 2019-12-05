@@ -1,0 +1,15 @@
+{
+  "compilerOptions": {
+    "module": "commonjs",
+    "target": "esnext",
+    "sourceMap": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "allowJs": true,
+    "strict": true,
+    "outDir": "lib"
+  },
+  "include": [
+    "src/**/*.ts"
+  ]
+}

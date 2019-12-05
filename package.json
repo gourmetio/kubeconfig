@@ -1,0 +1,17 @@
+{
+  "scripts": {
+    "test": "ts-node test/main.ts"
+  },
+  "main": "lib/index.js",
+  "dependencies": {
+    "js-yaml": "^3.13.1",
+    "pshell": "^1.1.0"
+  },
+  "devDependencies": {
+    "@types/js-yaml": "^3.12.1",
+    "@types/node": "^12.12.14",
+    "tape": "^4.11.0",
+    "ts-node": "^8.5.4",
+    "typescript": "^3.7.3"
+  }
+}

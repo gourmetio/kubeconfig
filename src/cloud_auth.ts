@@ -1,10 +1,7 @@
-import * as proc from "child_process";
-import https = require("https");
-import * as jsonpath from "jsonpath-plus";
-import request = require("request");
-
-import {Authenticator} from "./auth";
-import {User} from "./config_types";
+import proc from "child_process";
+import fastpath from "./fastpath";
+import {Authenticator, EXPIRY_MARGIN} from "./auth";
+import {User, RequestOptions} from "./config_types";
 
 /* FIXME: maybe we can extend the User and User.authProvider type to have a proper type.
 Currently user.authProvider has `any` type and so we don't have a type for user.authProvider.config.
@@ -30,11 +27,11 @@ export class CloudAuth implements Authenticator {
 
   public async applyAuthentication(
     user: User,
-    opts: request.Options | https.RequestOptions
+    options: RequestOptions
   ) {
     const token = this.getToken(user);
     if (token) {
-      opts.headers!.Authorization = `Bearer ${token}`;
+      options.headers.authorization = `Bearer ${token}`;
     }
   }
 
@@ -57,7 +54,7 @@ export class CloudAuth implements Authenticator {
     }
 
     const expiration = Date.parse(expiry);
-    if (expiration < Date.now()) {
+    if (expiration - EXPIRY_MARGIN < Date.now()) {
       return true;
     }
     return false;
@@ -92,7 +89,8 @@ export class CloudAuth implements Authenticator {
     const tokenPathKey = "$" + tokenPathKeyInConfig.slice(1, -1);
     const expiryPathKey = "$" + expiryPathKeyInConfig.slice(1, -1);
 
-    config["access-token"] = jsonpath.JSONPath(tokenPathKey, resultObj);
-    config.expiry = jsonpath.JSONPath(expiryPathKey, resultObj);
+    // We use `fastpath` instead of `jsonpath-plus` for a small package size.
+    config["access-token"] = fastpath(tokenPathKey).evaluate(resultObj);
+    config.expiry = fastpath(expiryPathKey).evaluate(resultObj);
   }
 }
