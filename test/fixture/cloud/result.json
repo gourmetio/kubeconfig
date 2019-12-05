@@ -7,18 +7,18 @@
         "zone": "us-central1-a"
       },
       "core": {
-        "account": "max@gourmetjs.com",
+        "account": "test@example.com",
         "disable_usage_reporting": "True",
-        "project": "gke-test-239122"
+        "project": "gke-test-123456"
       }
     }
   },
   "credential": {
     "access_token": "ya29.ImezB_UjKzNPsqIdkJnlD6GO0FbB18-zC1hmPt6xG4IcLYnCUOL5dGmUtM-ScrYlZJVYtuRkABKAqRlfBEDijC4p_1L8yFFtwHPYmeTBq_iatgcSfTcbAvIUBU1axnAHweceu6NuBvRp",
     "id_token": "eyJhbGciOiJSUzI1NiIsImtpZCI6IjViNWRkOWJlNDBiNWUxY2YxMjFlMzU3M2M4ZTQ5ZjEyNTI3MTgzZDMiLCJ0eXAiOiJKV1QifQ.eyJpc3MiOiJodHRwczovL2FjY291bnRzLmdvb2dsZS5jb20iLCJhenAiOiIzMjU1NTk0MDU1OS5hcHBzLmdvb2dsZXVzZXJjb250ZW50LmNvbSIsImF1ZCI6IjMyNTU1OTQwNTU5LmFwcHMuZ29vZ2xldXNlcmNvbnRlbnQuY29tIiwic3ViIjoiMTExNTc4OTczMjYwNDA4NTcyNzI0IiwiaGQiOiJnb3VybWV0anMuY29tIiwiZW1haWwiOiJtYXhAZ291cm1ldGpzLmNvbSIsImVtYWlsX3ZlcmlmaWVkIjp0cnVlLCJhdF9oYXNoIjoiRUlGRWFYUlYwWjVzTTExaU94NnBfZyIsImlhdCI6MTU3NTUxMTQwMCwiZXhwIjoxNTc1NTE1MDAwfQ.4fC5sLphi_G0GVEeMg3QgZGx5aH5nst0zfy3tbcGVslqDbmUKL5f1eI1MVBurPOvjZvE-iCZm0lLxrd81PLM_Z5i-4JkGxEJhhCp_G3WyraFBfVSXHO76Z4f184bvLwyRsNoYU_UtSsRLvs9aaCMU2Mx2masGpcFgz4VYAy-BCw-edZHHEOCahnk7TFt8sDMzCWo0FSnbGJLmx8Modgzuhwnsq2CJvqNo2r3YLfDS3ZEbsFdOHNfNN_nG2Wk-I1GOxmUMM6DVHCilpkAteB1aKqxlkarO8krhDdhRFTkQPIT0wiUP8qVxvRdnnOgjpQz0q3S_rECkaHmUzJ45e6bMw",
-    "token_expiry": "2019-12-05T03:03:20Z"
+    "token_expiry": "2019-12-01T03:03:20Z"
   },
   "sentinels": {
-    "config_sentinel": "C:\\Users\\kjnk\\AppData\\Roaming\\gcloud\\config_sentinel"
+    "config_sentinel": "C:\\Users\\user\\AppData\\Roaming\\gcloud\\config_sentinel"
   }
 }

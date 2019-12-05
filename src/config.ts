@@ -51,10 +51,16 @@ export class KubeConfig {
    */
   private currentContext?: ResolvedContext;
 
-  constructor() {
+  constructor({
+    loadFromDefault=false
+  }: {
+    loadFromDefault?: boolean
+  }={}) {
     this.contexts = [];
     this.clusters = [];
     this.users = [];
+    if (loadFromDefault)
+      this.loadFromDefault();
   }
 
   public getCurrentContext(): ResolvedContext {
@@ -63,7 +69,7 @@ export class KubeConfig {
     return this.currentContext;
   }
 
-  public setCurrentContext(name: string) {
+  public setCurrentContext(name: string): ResolvedContext {
     const context = getObject(this.contexts, name, "context");
     this.currentContext = {
       cluster: getObject(this.clusters, context.cluster, "cluster"),
@@ -71,6 +77,7 @@ export class KubeConfig {
       name,
       namespace: context.namespace
     };
+    return this.currentContext;
   }
 
   public loadFromFile(filepath: string) {
@@ -259,9 +266,9 @@ export class KubeConfig {
     };
     if (options.server.startsWith("https://")) {
       options.rejectUnauthorized = !cluster.skipTLSVerify;
-      options.ca = bufferFromFileOrString(cluster.caFile, cluster.caData);
-      options.cert = bufferFromFileOrString(user.certFile, user.certData);
-      options.key = bufferFromFileOrString(user.keyFile, user.keyData);
+      options.ca = loadFromFileOrString(cluster.caFile, cluster.caData);
+      options.cert = loadFromFileOrString(user.certFile, user.certData);
+      options.key = loadFromFileOrString(user.keyFile, user.keyData);
     }
     const authenticator = KubeConfig.authenticators.find(
       (item: Authenticator) => {
@@ -304,12 +311,12 @@ function makeAbsolutePath(root: string, file: string): string {
   return path.join(root, file);
 }
 
-function bufferFromFileOrString(file?: string, data?: string): Buffer | undefined {
+function loadFromFileOrString(file?: string, data?: string): string | undefined {
   if (file) {
-    return fs.readFileSync(file);
+    return fs.readFileSync(file, "utf8");
   }
   if (data) {
-    return Buffer.from(data, "base64");
+    return Buffer.from(data, "base64").toString();
   }
 }
 
